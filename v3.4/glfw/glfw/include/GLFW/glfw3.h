@@ -1968,6 +1968,30 @@ typedef void (* GLFWcharmodsfun)(GLFWwindow* window, unsigned int codepoint, int
  */
 typedef void (* GLFWdropfun)(GLFWwindow* window, int path_count, const char* paths[]);
 
+/*! @brief The function pointer type for text drop callbacks (Sytue patch).
+ *
+ *  Called when text, or URLs that are not files, are dropped on the window.
+ *  Exactly one of the two is given: either `text` is not `NULL` and
+ *  `url_count` is zero, or `text` is `NULL` and there are `url_count` URLs.
+ *  File URLs never come here: they still go to the path drop callback.
+ *
+ *  @param[in] window The window that received the event.
+ *  @param[in] xpos The x-coordinate of the drop, in the same units as the
+ *  cursor position callback, relative to the content area.
+ *  @param[in] ypos The y-coordinate of the drop, likewise.
+ *  @param[in] text The dropped text, UTF-8 encoded, or `NULL`.
+ *  @param[in] url_count The number of dropped URLs.
+ *  @param[in] urls The dropped URLs, UTF-8 encoded.
+ *
+ *  @pointer_lifetime The text and the URL strings, as well as the array, are
+ *  only valid until the callback function returns.
+ *
+ *  @sa glfwSetDropTextCallback
+ *
+ *  @ingroup input
+ */
+typedef void (* GLFWdroptextfun)(GLFWwindow* window, double xpos, double ypos, const char* text, int url_count, const char* urls[]);
+
 /*! @brief The function pointer type for monitor configuration callbacks.
  *
  *  This is the function pointer type for monitor configuration callbacks.
@@ -5450,6 +5474,23 @@ GLFWAPI GLFWscrollfun glfwSetScrollCallback(GLFWwindow* window, GLFWscrollfun ca
  *  @ingroup input
  */
 GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* window, GLFWdropfun callback);
+
+/*! @brief Sets the text drop callback (Sytue patch).
+ *
+ *  A window accepts dragged text, and URLs that are not files, only while it
+ *  has this callback: without it the window behaves exactly as before and
+ *  only accepts paths.
+ *
+ *  @param[in] window The window whose callback to set.
+ *  @param[in] callback The new text drop callback, or `NULL` to remove it.
+ *  @return The previously set callback, or `NULL` if no callback was set or
+ *  the library had not been [initialized](@ref intro_init).
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup input
+ */
+GLFWAPI GLFWdroptextfun glfwSetDropTextCallback(GLFWwindow* window, GLFWdroptextfun callback);
 
 /*! @brief Returns whether the specified joystick is present.
  *

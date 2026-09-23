@@ -1928,6 +1928,8 @@ static void dataOfferHandleOffer(void* userData,
         {
             if (strcmp(mimeType, "text/plain;charset=utf-8") == 0)
                 _glfw.wl.offers[i].text_plain_utf8 = GLFW_TRUE;
+            else if (strcmp(mimeType, "text/plain") == 0)
+                _glfw.wl.offers[i].text_plain = GLFW_TRUE;
             else if (strcmp(mimeType, "text/uri-list") == 0)
                 _glfw.wl.offers[i].text_uri_list = GLFW_TRUE;
 
@@ -1988,11 +1990,26 @@ static void dataDeviceHandleEnter(void* userData,
                     window = wl_surface_get_user_data(surface);
             }
 
-            if (surface == window->wl.surface && _glfw.wl.offers[i].text_uri_list)
+            // Sytue patch: without a URI list, plain text, but only for a
+            // window that asked for it with a text drop callback
+            const char* mimeType = NULL;
+            if (!window || surface != window->wl.surface)
+                mimeType = NULL;
+            else if (_glfw.wl.offers[i].text_uri_list)
+                mimeType = "text/uri-list";
+            else if (window->callbacks.droptext && _glfw.wl.offers[i].text_plain_utf8)
+                mimeType = "text/plain;charset=utf-8";
+            else if (window->callbacks.droptext && _glfw.wl.offers[i].text_plain)
+                mimeType = "text/plain";
+
+            if (mimeType)
             {
                 _glfw.wl.dragOffer = offer;
                 _glfw.wl.dragFocus = window;
                 _glfw.wl.dragSerial = serial;
+                _glfw.wl.dragMimeType = mimeType;
+                _glfw.wl.dragX = wl_fixed_to_double(x);
+                _glfw.wl.dragY = wl_fixed_to_double(y);
             }
 
             _glfw.wl.offers[i] = _glfw.wl.offers[_glfw.wl.offerCount - 1];
@@ -2005,7 +2022,7 @@ static void dataDeviceHandleEnter(void* userData,
         return;
 
     if (_glfw.wl.dragOffer)
-        wl_data_offer_accept(offer, serial, "text/uri-list");
+        wl_data_offer_accept(offer, serial, _glfw.wl.dragMimeType);
     else
     {
         wl_data_offer_accept(offer, serial, NULL);
@@ -2030,6 +2047,8 @@ static void dataDeviceHandleMotion(void* userData,
                                    wl_fixed_t x,
                                    wl_fixed_t y)
 {
+    _glfw.wl.dragX = wl_fixed_to_double(x);
+    _glfw.wl.dragY = wl_fixed_to_double(y);
 }
 
 static void dataDeviceHandleDrop(void* userData,
@@ -2038,19 +2057,11 @@ static void dataDeviceHandleDrop(void* userData,
     if (!_glfw.wl.dragOffer)
         return;
 
-    char* string = readDataOfferAsString(_glfw.wl.dragOffer, "text/uri-list");
-    if (string)
-    {
-        int count;
-        char** paths = _glfwParseUriList(string, &count);
-        if (paths)
-            _glfwInputDrop(_glfw.wl.dragFocus, count, (const char**) paths);
-
-        for (int i = 0; i < count; i++)
-            _glfw_free(paths[i]);
-
-        _glfw_free(paths);
-    }
+    char* string = readDataOfferAsString(_glfw.wl.dragOffer, _glfw.wl.dragMimeType);
+    if (string && strcmp(_glfw.wl.dragMimeType, "text/uri-list") == 0)
+        _glfwInputDropUriList(_glfw.wl.dragFocus, _glfw.wl.dragX, _glfw.wl.dragY, string);
+    else if (string && string[0] != '\0')
+        _glfwInputDropText(_glfw.wl.dragFocus, _glfw.wl.dragX, _glfw.wl.dragY, string, 0, NULL);
 
     _glfw_free(string);
 }

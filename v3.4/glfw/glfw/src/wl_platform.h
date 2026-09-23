@@ -336,6 +336,7 @@ typedef struct _GLFWofferWayland
 {
     struct wl_data_offer*       offer;
     GLFWbool                    text_plain_utf8;
+    GLFWbool                    text_plain;
     GLFWbool                    text_uri_list;
 } _GLFWofferWayland;
 
@@ -447,6 +448,9 @@ typedef struct _GLFWlibraryWayland
     struct wl_data_offer*       dragOffer;
     _GLFWwindow*                dragFocus;
     uint32_t                    dragSerial;
+    const char*                 dragMimeType;
+    double                      dragX;
+    double                      dragY;
 
     const char*                 tag;
 

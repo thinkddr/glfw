@@ -1607,6 +1607,27 @@ static void processEvent(XEvent *event)
                     }
                 }
 
+                // Sytue patch: without a URI list, plain text, but only for a
+                // window that asked for it with a text drop callback
+                if (!_glfw.x11.xdnd.format && window->callbacks.droptext)
+                {
+                    const Atom texts[] = { _glfw.x11.text_plain_utf8,
+                                           _glfw.x11.UTF8_STRING,
+                                           _glfw.x11.text_plain };
+
+                    for (unsigned int j = 0;  j < 3 && !_glfw.x11.xdnd.format;  j++)
+                    {
+                        for (unsigned int i = 0;  i < count;  i++)
+                        {
+                            if (formats[i] == texts[j])
+                            {
+                                _glfw.x11.xdnd.format = texts[j];
+                                break;
+                            }
+                        }
+                    }
+                }
+
                 if (list && formats)
                     XFree(formats);
             }
@@ -1665,6 +1686,8 @@ static void processEvent(XEvent *event)
                                       &dummy);
 
                 _glfwInputCursorPos(window, xpos, ypos);
+                _glfw.x11.xdnd.xpos = xpos;
+                _glfw.x11.xdnd.ypos = ypos;
 
                 XEvent reply = { ClientMessage };
                 reply.xclient.window = _glfw.x11.xdnd.source;
@@ -1696,22 +1719,29 @@ static void processEvent(XEvent *event)
             {
                 // The converted data from the drag operation has arrived
                 char* data;
+                const GLFWbool uris =
+                    event->xselection.target == _glfw.x11.text_uri_list;
+                // Sytue patch: sources label text with its target or with
+                // UTF8_STRING, so text is read whatever its type
                 const unsigned long result =
                     _glfwGetWindowPropertyX11(event->xselection.requestor,
                                               event->xselection.property,
-                                              event->xselection.target,
+                                              uris ? event->xselection.target : AnyPropertyType,
                                               (unsigned char**) &data);
 
-                if (result)
+                if (result && uris)
                 {
-                    int count;
-                    char** paths = _glfwParseUriList(data, &count);
-
-                    _glfwInputDrop(window, count, (const char**) paths);
-
-                    for (int i = 0;  i < count;  i++)
-                        _glfw_free(paths[i]);
-                    _glfw_free(paths);
+                    _glfwInputDropUriList(window,
+                                          _glfw.x11.xdnd.xpos,
+                                          _glfw.x11.xdnd.ypos,
+                                          data);
+                }
+                else if (result)
+                {
+                    _glfwInputDropText(window,
+                                       _glfw.x11.xdnd.xpos,
+                                       _glfw.x11.xdnd.ypos,
+                                       data, 0, NULL);
                 }
 
                 if (data)

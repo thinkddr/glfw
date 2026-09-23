@@ -411,6 +411,90 @@ void _glfwInputDrop(_GLFWwindow* window, int count, const char** paths)
         window->callbacks.drop((GLFWwindow*) window, count, paths);
 }
 
+// Notifies shared code of text, or of URLs that are not files, dropped on a
+// window (Sytue patch)
+//
+void _glfwInputDropText(_GLFWwindow* window, double xpos, double ypos,
+                        const char* text, int count, const char** urls)
+{
+    assert(window != NULL);
+    assert((text != NULL) != (count > 0));
+
+    if (window->callbacks.droptext)
+        window->callbacks.droptext((GLFWwindow*) window, xpos, ypos, text, count, urls);
+}
+
+// Delivers a dropped text/uri-list (Sytue patch): the file URIs go to the
+// path drop callback, as before, and the rest to the text drop callback.
+// A window without a text drop callback gets the whole list as paths, which
+// is exactly what it got before the patch
+//
+void _glfwInputDropUriList(_GLFWwindow* window, double xpos, double ypos, char* list)
+{
+    int count = 0;
+    char** paths;
+
+    if (window->callbacks.droptext)
+    {
+        const size_t length = strlen(list);
+        // Each file line keeps its length plus one newline, and only the last
+        // one can lack a separator in the original
+        char* files = _glfw_calloc(length + 2, 1);
+        size_t filesLength = 0;
+        char* copy = _glfw_strdup(list);
+        const char** urls = _glfw_calloc(length + 1, sizeof(char*));
+        int urlCount = 0;
+        char* next = copy;
+
+        while (next)
+        {
+            char* line = next;
+            char* stop = line + strcspn(line, "\r\n");
+            next = *stop ? stop + 1 : NULL;
+            *stop = '\0';
+
+            while (*line == ' ' || *line == '\t')
+                line++;
+            while (stop > line && (stop[-1] == ' ' || stop[-1] == '\t'))
+                *--stop = '\0';
+
+            if (line[0] == '\0' || line[0] == '#')
+                continue;
+
+            if (strncmp(line, "file:", 5) == 0)
+            {
+                const size_t lineLength = strlen(line);
+                memcpy(files + filesLength, line, lineLength);
+                filesLength += lineLength;
+                files[filesLength++] = '\n';
+            }
+            else
+                urls[urlCount++] = line;
+        }
+
+        if (urlCount > 0)
+            _glfwInputDropText(window, xpos, ypos, NULL, urlCount, urls);
+
+        paths = _glfwParseUriList(files, &count);
+        if (count > 0)
+            _glfwInputDrop(window, count, (const char**) paths);
+
+        _glfw_free(urls);
+        _glfw_free(copy);
+        _glfw_free(files);
+    }
+    else
+    {
+        paths = _glfwParseUriList(list, &count);
+        if (count > 0)
+            _glfwInputDrop(window, count, (const char**) paths);
+    }
+
+    for (int i = 0;  i < count;  i++)
+        _glfw_free(paths[i]);
+    _glfw_free(paths);
+}
+
 // Notifies shared code of a joystick connection or disconnection
 //
 void _glfwInputJoystick(_GLFWjoystick* js, int event)
@@ -1024,6 +1108,16 @@ GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* handle, GLFWdropfun cbfun)
 
     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
     _GLFW_SWAP(GLFWdropfun, window->callbacks.drop, cbfun);
+    return cbfun;
+}
+
+GLFWAPI GLFWdroptextfun glfwSetDropTextCallback(GLFWwindow* handle, GLFWdroptextfun cbfun)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    assert(window != NULL);
+
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+    _GLFW_SWAP(GLFWdroptextfun, window->callbacks.droptext, cbfun);
     return cbfun;
 }
 
