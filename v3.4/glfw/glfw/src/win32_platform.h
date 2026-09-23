@@ -66,6 +66,7 @@
 
 #include <wctype.h>
 #include <windows.h>
+#include <ole2.h> // Sytue patch: the OLE drop target
 #include <dinput.h>
 #include <xinput.h>
 #include <dbt.h>
@@ -408,6 +409,17 @@ typedef struct _GLFWlibraryWGL
     GLFWbool                            ARB_context_flush_control;
 } _GLFWlibraryWGL;
 
+// Sytue patch: the OLE drop target of a window (win32_window.c)
+//
+typedef struct _GLFWdropTargetWin32
+{
+    // First, so that the IDropTarget* that OLE hands back is one of these
+    IDropTarget         target;
+    _GLFWwindow*        window;
+    int                 kind;
+    GLFWbool            ole;
+} _GLFWdropTargetWin32;
+
 // Win32-specific per-window data
 //
 typedef struct _GLFWwindowWin32
@@ -433,6 +445,9 @@ typedef struct _GLFWwindowWin32
     int                 lastCursorPosX, lastCursorPosY;
     // The last received high surrogate when decoding pairs of UTF-16 messages
     WCHAR               highSurrogate;
+
+    // Sytue patch: the OLE drop target (win32_window.c)
+    _GLFWdropTargetWin32 drop;
 } _GLFWwindowWin32;
 
 // Win32-specific global data

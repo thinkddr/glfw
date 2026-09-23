@@ -528,6 +528,231 @@ static void maximizeWindowManually(_GLFWwindow* window)
                  SWP_NOACTIVATE | SWP_NOZORDER | SWP_FRAMECHANGED);
 }
 
+// Delivers the paths in a HDROP, moving the cursor to where they were dropped
+//
+static void inputDropHDROP(_GLFWwindow* window, HDROP drop, POINT pt)
+{
+    const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
+    char** paths = _glfw_calloc(count, sizeof(char*));
+    int i;
+
+    // Move the mouse to the position of the drop
+    _glfwInputCursorPos(window, pt.x, pt.y);
+
+    for (i = 0;  i < count;  i++)
+    {
+        const UINT length = DragQueryFileW(drop, i, NULL, 0);
+        WCHAR* buffer = _glfw_calloc((size_t) length + 1, sizeof(WCHAR));
+
+        DragQueryFileW(drop, i, buffer, length + 1);
+        paths[i] = _glfwCreateUTF8FromWideStringWin32(buffer);
+
+        _glfw_free(buffer);
+    }
+
+    if (count > 0)
+        _glfwInputDrop(window, count, (const char**) paths);
+
+    for (i = 0;  i < count;  i++)
+        _glfw_free(paths[i]);
+    _glfw_free(paths);
+}
+
+// Sytue patch: an OLE drop target, so that a window with a text drop callback
+// takes text and URLs as well as files. Windows registered for OLE drops no
+// longer get WM_DROPFILES from OLE sources such as Explorer, so the target
+// delivers the files too, through the same path as WM_DROPFILES
+//
+// The target lives inside the window and is revoked before the window goes,
+// so its reference count is not tracked
+//
+enum { DROP_NOTHING, DROP_FILES, DROP_TEXT };
+
+static const IID _glfw_IID_IUnknown =
+    {0x00000000,0x0000,0x0000,{0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
+static const IID _glfw_IID_IDropTarget =
+    {0x00000122,0x0000,0x0000,{0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46}};
+
+static _GLFWwindow* dropTargetWindow(IDropTarget* target)
+{
+    return ((_GLFWdropTargetWin32*) target)->window;
+}
+
+static CLIPFORMAT dropURLFormat(void)
+{
+    static CLIPFORMAT format = 0;
+    if (!format)
+        format = (CLIPFORMAT) RegisterClipboardFormatW(L"UniformResourceLocatorW");
+    return format;
+}
+
+static GLFWbool dropOffers(IDataObject* data, CLIPFORMAT format)
+{
+    FORMATETC fe = { format, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    return data->lpVtbl->QueryGetData(data, &fe) == S_OK;
+}
+
+static int dropKind(_GLFWwindow* window, IDataObject* data)
+{
+    if (dropOffers(data, CF_HDROP))
+        return DROP_FILES;
+    if (window->callbacks.droptext &&
+        (dropOffers(data, dropURLFormat()) || dropOffers(data, CF_UNICODETEXT)))
+    {
+        return DROP_TEXT;
+    }
+    return DROP_NOTHING;
+}
+
+static DWORD dropEffect(int kind, DWORD allowed)
+{
+    if (kind == DROP_NOTHING)
+        return DROPEFFECT_NONE;
+    if (allowed & DROPEFFECT_COPY)
+        return DROPEFFECT_COPY;
+    return allowed & DROPEFFECT_LINK;
+}
+
+// Returns the wide string in the data object in that format, or NULL
+//
+static char* dropString(IDataObject* data, CLIPFORMAT format)
+{
+    FORMATETC fe = { format, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+    STGMEDIUM medium;
+    char* string = NULL;
+
+    if (data->lpVtbl->GetData(data, &fe, &medium) != S_OK)
+        return NULL;
+
+    const WCHAR* buffer = GlobalLock(medium.hGlobal);
+    if (buffer)
+    {
+        // The string need not be terminated inside the block
+        const SIZE_T max = GlobalSize(medium.hGlobal) / sizeof(WCHAR);
+        SIZE_T length = 0;
+        while (length < max && buffer[length])
+            length++;
+
+        WCHAR* copy = _glfw_calloc(length + 1, sizeof(WCHAR));
+        memcpy(copy, buffer, length * sizeof(WCHAR));
+        string = _glfwCreateUTF8FromWideStringWin32(copy);
+        _glfw_free(copy);
+        GlobalUnlock(medium.hGlobal);
+    }
+
+    ReleaseStgMedium(&medium);
+    return string;
+}
+
+static HRESULT STDMETHODCALLTYPE dropQueryInterface(IDropTarget* target,
+                                                    REFIID riid,
+                                                    void** object)
+{
+    if (IsEqualIID(riid, &_glfw_IID_IUnknown) || IsEqualIID(riid, &_glfw_IID_IDropTarget))
+    {
+        *object = target;
+        return S_OK;
+    }
+
+    *object = NULL;
+    return E_NOINTERFACE;
+}
+
+static ULONG STDMETHODCALLTYPE dropAddRef(IDropTarget* target)
+{
+    return 1;
+}
+
+static ULONG STDMETHODCALLTYPE dropRelease(IDropTarget* target)
+{
+    return 1;
+}
+
+static HRESULT STDMETHODCALLTYPE dropDragEnter(IDropTarget* target,
+                                               IDataObject* data,
+                                               DWORD keys,
+                                               POINTL pt,
+                                               DWORD* effect)
+{
+    _GLFWwindow* window = dropTargetWindow(target);
+    window->win32.drop.kind = dropKind(window, data);
+    *effect = dropEffect(window->win32.drop.kind, *effect);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropDragOver(IDropTarget* target,
+                                              DWORD keys,
+                                              POINTL pt,
+                                              DWORD* effect)
+{
+    _GLFWwindow* window = dropTargetWindow(target);
+    *effect = dropEffect(window->win32.drop.kind, *effect);
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropDragLeave(IDropTarget* target)
+{
+    dropTargetWindow(target)->win32.drop.kind = DROP_NOTHING;
+    return S_OK;
+}
+
+static HRESULT STDMETHODCALLTYPE dropDrop(IDropTarget* target,
+                                          IDataObject* data,
+                                          DWORD keys,
+                                          POINTL pt,
+                                          DWORD* effect)
+{
+    _GLFWwindow* window = dropTargetWindow(target);
+    const int kind = dropKind(window, data);
+    POINT point = { pt.x, pt.y };
+
+    window->win32.drop.kind = DROP_NOTHING;
+    *effect = dropEffect(kind, *effect);
+    ScreenToClient(window->win32.handle, &point);
+
+    if (kind == DROP_FILES)
+    {
+        FORMATETC fe = { CF_HDROP, NULL, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
+        STGMEDIUM medium;
+
+        if (data->lpVtbl->GetData(data, &fe, &medium) == S_OK)
+        {
+            inputDropHDROP(window, (HDROP) medium.hGlobal, point);
+            ReleaseStgMedium(&medium);
+        }
+    }
+    else if (kind == DROP_TEXT)
+    {
+        char* url = dropString(data, dropURLFormat());
+        if (url && url[0])
+        {
+            const char* urls[] = { url };
+            _glfwInputDropText(window, point.x, point.y, NULL, 1, urls);
+        }
+        else
+        {
+            char* text = dropString(data, CF_UNICODETEXT);
+            if (text && text[0])
+                _glfwInputDropText(window, point.x, point.y, text, 0, NULL);
+            _glfw_free(text);
+        }
+        _glfw_free(url);
+    }
+
+    return S_OK;
+}
+
+static IDropTargetVtbl dropTargetVtbl =
+{
+    dropQueryInterface,
+    dropAddRef,
+    dropRelease,
+    dropDragEnter,
+    dropDragOver,
+    dropDragLeave,
+    dropDrop
+};
+
 // Window procedure for user-created windows
 //
 static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -1236,31 +1461,9 @@ static LRESULT CALLBACK windowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM l
         {
             HDROP drop = (HDROP) wParam;
             POINT pt;
-            int i;
 
-            const int count = DragQueryFileW(drop, 0xffffffff, NULL, 0);
-            char** paths = _glfw_calloc(count, sizeof(char*));
-
-            // Move the mouse to the position of the drop
             DragQueryPoint(drop, &pt);
-            _glfwInputCursorPos(window, pt.x, pt.y);
-
-            for (i = 0;  i < count;  i++)
-            {
-                const UINT length = DragQueryFileW(drop, i, NULL, 0);
-                WCHAR* buffer = _glfw_calloc((size_t) length + 1, sizeof(WCHAR));
-
-                DragQueryFileW(drop, i, buffer, length + 1);
-                paths[i] = _glfwCreateUTF8FromWideStringWin32(buffer);
-
-                _glfw_free(buffer);
-            }
-
-            _glfwInputDrop(window, count, (const char**) paths);
-
-            for (i = 0;  i < count;  i++)
-                _glfw_free(paths[i]);
-            _glfw_free(paths);
+            inputDropHDROP(window, drop, pt);
 
             DragFinish(drop);
             return 0;
@@ -1480,6 +1683,16 @@ static int createNativeWindow(_GLFWwindow* window,
 
     DragAcceptFiles(window->win32.handle, TRUE);
 
+    // Sytue patch: the OLE drop target. Without OLE on this thread (already in
+    // the multithreaded apartment), the window keeps WM_DROPFILES and paths only
+    if (SUCCEEDED(OleInitialize(NULL)))
+    {
+        window->win32.drop.ole = GLFW_TRUE;
+        window->win32.drop.target.lpVtbl = &dropTargetVtbl;
+        window->win32.drop.window = window;
+        RegisterDragDrop(window->win32.handle, &window->win32.drop.target);
+    }
+
     if (fbconfig->transparent)
     {
         updateFramebufferTransparency(window);
@@ -1566,6 +1779,14 @@ void _glfwDestroyWindowWin32(_GLFWwindow* window)
 
     if (_glfw.win32.capturedCursorWindow == window)
         releaseCursor();
+
+    if (window->win32.drop.ole)
+    {
+        // Sytue patch: see the OLE drop target
+        RevokeDragDrop(window->win32.handle);
+        OleUninitialize();
+        window->win32.drop.ole = GLFW_FALSE;
+    }
 
     if (window->win32.handle)
     {

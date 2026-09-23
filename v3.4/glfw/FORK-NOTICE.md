@@ -6,8 +6,10 @@ requiere Fyne v2.8.1 (`v0.1.0-pre.1.0.20260707082822-2a407d02d01a`, GLFW C
 aceptar TEXTO y URL que no son ficheros soltados sobre ella**, además de las rutas.
 
 - C: `glfwSetDropTextCallback` y `GLFWdroptextfun` (`glfw/include/GLFW/glfw3.h`), el
-  reparto de `text/uri-list` entre ficheros y URL (`glfw/src/input.c`) y los backends
-  que lo entregan.
+  reparto de `text/uri-list` entre ficheros y URL (`glfw/src/input.c`) y los cuatro
+  backends que lo entregan: el XDnD de X11, el `wl_data_device` de Wayland, la vista de
+  Cocoa y un `IDropTarget` de OLE en Win32 (que entrega también los ficheros, porque una
+  ventana registrada para OLE deja de recibir `WM_DROPFILES` del Explorador).
 - Go: `SetDropTextCallback` (`droptext.go`), una retrollamada para todas las ventanas.
 
 Una ventana sin retrollamada de texto se comporta EXACTAMENTE como sin el parche. Los

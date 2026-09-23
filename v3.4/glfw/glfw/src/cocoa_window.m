@@ -350,7 +350,8 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
         markedText = [[NSMutableAttributedString alloc] init];
 
         [self updateTrackingAreas];
-        [self registerForDraggedTypes:@[NSPasteboardTypeURL]];
+        // Sytue patch: strings too, for windows with a text drop callback
+        [self registerForDraggedTypes:@[NSPasteboardTypeURL, NSPasteboardTypeString]];
     }
 
     return self;
@@ -615,6 +616,15 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
 
 - (NSDragOperation)draggingEntered:(id <NSDraggingInfo>)sender
 {
+    // Sytue patch: the view is registered for strings only because of the text
+    // drop callback, so without one a drag with no URL is refused, as before
+    if (!window->callbacks.droptext &&
+        ![[sender draggingPasteboard] availableTypeFromArray:@[NSPasteboardTypeURL,
+                                                                NSPasteboardTypeFileURL]])
+    {
+        return NSDragOperationNone;
+    }
+
     // HACK: We don't know what to say here because we don't know what the
     //       application wants to do with the paths
     return NSDragOperationGeneric;
@@ -644,6 +654,34 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
         for (NSUInteger i = 0;  i < count;  i++)
             _glfw_free(paths[i]);
         _glfw_free(paths);
+    }
+    else if (window->callbacks.droptext)
+    {
+        // Sytue patch: without files, the URLs, or else the text
+        const double xpos = pos.x;
+        const double ypos = contentRect.size.height - pos.y;
+
+        NSArray* links = nil;
+        if ([pasteboard availableTypeFromArray:@[NSPasteboardTypeURL]])
+            links = [pasteboard readObjectsForClasses:@[[NSURL class]] options:nil];
+
+        const NSUInteger linkCount = [links count];
+        if (linkCount)
+        {
+            const char** list = _glfw_calloc(linkCount, sizeof(char*));
+
+            for (NSUInteger i = 0;  i < linkCount;  i++)
+                list[i] = [[links[i] absoluteString] UTF8String];
+
+            _glfwInputDropText(window, xpos, ypos, NULL, (int) linkCount, list);
+            _glfw_free(list);
+        }
+        else
+        {
+            NSString* text = [pasteboard stringForType:NSPasteboardTypeString];
+            if ([text length])
+                _glfwInputDropText(window, xpos, ypos, [text UTF8String], 0, NULL);
+        }
     }
 
     return YES;
