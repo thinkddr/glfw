@@ -572,7 +572,11 @@ struct _GLFWwindow
         GLFWcharmodsfun           charmods;
         GLFWdropfun               drop;
         GLFWdroptextfun           droptext;
+        GLFWdragfun               drag;
     } callbacks;
+
+    // Sytue patch: whether an acceptable drag is hovering over the window
+    GLFWbool            dragHovering;
 
     // This is defined in platform.h
     GLFW_PLATFORM_WINDOW_STATE
@@ -929,6 +933,7 @@ void _glfwInputCursorEnter(_GLFWwindow* window, GLFWbool entered);
 void _glfwInputDrop(_GLFWwindow* window, int count, const char** names);
 void _glfwInputDropText(_GLFWwindow* window, double xpos, double ypos, const char* text, int count, const char** urls);
 void _glfwInputDropUriList(_GLFWwindow* window, double xpos, double ypos, char* list);
+void _glfwInputDrag(_GLFWwindow* window, GLFWbool hovering);
 void _glfwInputJoystick(_GLFWjoystick* js, int event);
 void _glfwInputJoystickAxis(_GLFWjoystick* js, int axis, float value);
 void _glfwInputJoystickButton(_GLFWjoystick* js, int button, char value);

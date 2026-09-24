@@ -4,3 +4,8 @@
 void glfwSetDropTextCallbackCB(GLFWwindow *window) {
   glfwSetDropTextCallback(window, (GLFWdroptextfun)goDropTextCB);
 }
+
+// Sytue patch: the C side of the drag hover callback (drag.go).
+void glfwSetDragCallbackCB(GLFWwindow *window) {
+  glfwSetDragCallback(window, (GLFWdragfun)goDragCB);
+}

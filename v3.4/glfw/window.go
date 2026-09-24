@@ -402,6 +402,9 @@ func CreateWindow(width, height int, title string, monitor *Monitor, share *Wind
 	if fDropText != nil { // Sytue patch: see droptext.go
 		setDropText(w)
 	}
+	if fDrag != nil { // Sytue patch: see drag.go
+		setDrag(w)
+	}
 	windows.l.Unlock()
 	return wnd, nil
 }

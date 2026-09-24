@@ -424,6 +424,24 @@ void _glfwInputDropText(_GLFWwindow* window, double xpos, double ypos,
         window->callbacks.droptext((GLFWwindow*) window, xpos, ypos, text, count, urls);
 }
 
+// Notifies shared code that an acceptable drag started or stopped hovering
+// over a window (Sytue patch). Backends may report the same state more than
+// once (a drop and the leave that some systems send after it): only the
+// changes reach the callback
+//
+void _glfwInputDrag(_GLFWwindow* window, GLFWbool hovering)
+{
+    assert(window != NULL);
+
+    hovering = hovering ? GLFW_TRUE : GLFW_FALSE;
+    if (window->dragHovering == hovering)
+        return;
+
+    window->dragHovering = hovering;
+    if (window->callbacks.drag)
+        window->callbacks.drag((GLFWwindow*) window, hovering);
+}
+
 // Delivers a dropped text/uri-list (Sytue patch): the file URIs go to the
 // path drop callback, as before, and the rest to the text drop callback.
 // A window without a text drop callback gets the whole list as paths, which
@@ -1118,6 +1136,16 @@ GLFWAPI GLFWdroptextfun glfwSetDropTextCallback(GLFWwindow* handle, GLFWdroptext
 
     _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
     _GLFW_SWAP(GLFWdroptextfun, window->callbacks.droptext, cbfun);
+    return cbfun;
+}
+
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* handle, GLFWdragfun cbfun)
+{
+    _GLFWwindow* window = (_GLFWwindow*) handle;
+    assert(window != NULL);
+
+    _GLFW_REQUIRE_INIT_OR_RETURN(NULL);
+    _GLFW_SWAP(GLFWdragfun, window->callbacks.drag, cbfun);
     return cbfun;
 }
 

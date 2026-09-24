@@ -1630,6 +1630,12 @@ static void processEvent(XEvent *event)
 
                 if (list && formats)
                     XFree(formats);
+
+                // Sytue patch: drag hover, for paths only. A URI list may also
+                // carry URLs that are not files, but that is not known before
+                // the drop
+                if (_glfw.x11.xdnd.format == _glfw.x11.text_uri_list)
+                    _glfwInputDrag(window, GLFW_TRUE);
             }
             else if (event->xclient.message_type == _glfw.x11.XdndDrop)
             {
@@ -1638,6 +1644,9 @@ static void processEvent(XEvent *event)
 
                 if (_glfw.x11.xdnd.version > _GLFW_XDND_VERSION)
                     return;
+
+                // Sytue patch: the drag stops hovering before the drop arrives
+                _glfwInputDrag(window, GLFW_FALSE);
 
                 if (_glfw.x11.xdnd.format)
                 {
@@ -1666,6 +1675,14 @@ static void processEvent(XEvent *event)
                                False, NoEventMask, &reply);
                     XFlush(_glfw.x11.display);
                 }
+            }
+            else if (event->xclient.message_type == _glfw.x11.XdndLeave)
+            {
+                // Sytue patch: the drag left the window or was cancelled
+                if (_glfw.x11.xdnd.version > _GLFW_XDND_VERSION)
+                    return;
+
+                _glfwInputDrag(window, GLFW_FALSE);
             }
             else if (event->xclient.message_type == _glfw.x11.XdndPosition)
             {

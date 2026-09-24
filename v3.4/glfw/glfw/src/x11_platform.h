@@ -626,6 +626,7 @@ typedef struct _GLFWlibraryX11
     Atom            XdndFinished;
     Atom            XdndSelection;
     Atom            XdndTypeList;
+    Atom            XdndLeave; // Sytue patch: drag hover
     Atom            text_uri_list;
     Atom            text_plain_utf8;
     Atom            text_plain;

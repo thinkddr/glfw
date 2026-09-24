@@ -1992,6 +1992,25 @@ typedef void (* GLFWdropfun)(GLFWwindow* window, int path_count, const char* pat
  */
 typedef void (* GLFWdroptextfun)(GLFWwindow* window, double xpos, double ypos, const char* text, int url_count, const char* urls[]);
 
+/*! @brief The function pointer type for drag hover callbacks (Sytue patch).
+ *
+ *  Called when a drag of paths starts hovering over the window, and again
+ *  when it stops: because it left the window, because it was cancelled or
+ *  because it was dropped. In the last case this is called before the drop
+ *  callbacks. Each change is reported once. Text and URLs that are not files
+ *  do not count, except on X11, where a URI list is announced before it is
+ *  known whether it holds files. Not reported on Wayland.
+ *
+ *  @param[in] window The window that received the event.
+ *  @param[in] hovering `GLFW_TRUE` when the drag starts hovering over the
+ *  window, `GLFW_FALSE` when it stops.
+ *
+ *  @sa glfwSetDragCallback
+ *
+ *  @ingroup input
+ */
+typedef void (* GLFWdragfun)(GLFWwindow* window, int hovering);
+
 /*! @brief The function pointer type for monitor configuration callbacks.
  *
  *  This is the function pointer type for monitor configuration callbacks.
@@ -5491,6 +5510,23 @@ GLFWAPI GLFWdropfun glfwSetDropCallback(GLFWwindow* window, GLFWdropfun callback
  *  @ingroup input
  */
 GLFWAPI GLFWdroptextfun glfwSetDropTextCallback(GLFWwindow* window, GLFWdroptextfun callback);
+
+/*! @brief Sets the drag hover callback (Sytue patch).
+ *
+ *  It says when paths are being dragged over the window, so that the
+ *  application can show where they can be dropped. It does not change what
+ *  the window accepts.
+ *
+ *  @param[in] window The window whose callback to set.
+ *  @param[in] callback The new drag hover callback, or `NULL` to remove it.
+ *  @return The previously set callback, or `NULL` if no callback was set or
+ *  the library had not been [initialized](@ref intro_init).
+ *
+ *  @thread_safety This function must only be called from the main thread.
+ *
+ *  @ingroup input
+ */
+GLFWAPI GLFWdragfun glfwSetDragCallback(GLFWwindow* window, GLFWdragfun callback);
 
 /*! @brief Returns whether the specified joystick is present.
  *

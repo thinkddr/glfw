@@ -677,6 +677,8 @@ static HRESULT STDMETHODCALLTYPE dropDragEnter(IDropTarget* target,
     _GLFWwindow* window = dropTargetWindow(target);
     window->win32.drop.kind = dropKind(window, data);
     *effect = dropEffect(window->win32.drop.kind, *effect);
+    // Sytue patch: drag hover, for paths only
+    _glfwInputDrag(window, window->win32.drop.kind == DROP_FILES);
     return S_OK;
 }
 
@@ -693,6 +695,8 @@ static HRESULT STDMETHODCALLTYPE dropDragOver(IDropTarget* target,
 static HRESULT STDMETHODCALLTYPE dropDragLeave(IDropTarget* target)
 {
     dropTargetWindow(target)->win32.drop.kind = DROP_NOTHING;
+    // Sytue patch: drag hover
+    _glfwInputDrag(dropTargetWindow(target), GLFW_FALSE);
     return S_OK;
 }
 
@@ -709,6 +713,8 @@ static HRESULT STDMETHODCALLTYPE dropDrop(IDropTarget* target,
     window->win32.drop.kind = DROP_NOTHING;
     *effect = dropEffect(kind, *effect);
     ScreenToClient(window->win32.handle, &point);
+    // Sytue patch: the drag stops hovering before the drop is delivered
+    _glfwInputDrag(window, GLFW_FALSE);
 
     if (kind == DROP_FILES)
     {

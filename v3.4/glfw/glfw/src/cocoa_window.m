@@ -625,13 +625,34 @@ static const NSRange kEmptyRange = { NSNotFound, 0 };
         return NSDragOperationNone;
     }
 
+    // Sytue patch: drag hover, for paths only
+    if ([[sender draggingPasteboard] availableTypeFromArray:@[NSPasteboardTypeFileURL]])
+        _glfwInputDrag(window, GLFW_TRUE);
+
     // HACK: We don't know what to say here because we don't know what the
     //       application wants to do with the paths
     return NSDragOperationGeneric;
 }
 
+// Sytue patch: drag hover. AppKit sends draggingExited: when the drag leaves
+// the view and draggingEnded: when the session finishes anywhere, so both
+// stop it (only the first change reaches the callback); performDragOperation:
+// does it before the drop is delivered
+- (void)draggingExited:(id <NSDraggingInfo>)sender
+{
+    _glfwInputDrag(window, GLFW_FALSE);
+}
+
+- (void)draggingEnded:(id <NSDraggingInfo>)sender
+{
+    _glfwInputDrag(window, GLFW_FALSE);
+}
+
 - (BOOL)performDragOperation:(id <NSDraggingInfo>)sender
 {
+    // Sytue patch: the drag stops hovering before the drop is delivered
+    _glfwInputDrag(window, GLFW_FALSE);
+
     const NSRect contentRect = [window->ns.view frame];
     // NOTE: The returned location uses base 0,1 not 0,0
     const NSPoint pos = [sender draggingLocation];
