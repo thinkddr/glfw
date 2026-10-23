@@ -1,7 +1,8 @@
 # Fork de Sytue de go-gl/glfw (v3.4)
 
 Este repositorio es el módulo `github.com/go-gl/glfw/v3.4/glfw` en la versión que
-requiere Fyne v2.8.1 (`v0.1.0-pre.1.0.20260707082822-2a407d02d01a`, GLFW C
+requiere Fyne v2.8.2 (`v0.1.0-pre.2`, fuente oficial
+`d41da22a9587f777098f96d37014f6cdd35d1afb`, GLFW C
 `7b6aead9fb88b3623e3b3725ebb42670cbe4c579`), con dos parches: **una ventana puede
 aceptar TEXTO y URL que no son ficheros soltados sobre ella**, además de las rutas, y
 **una ventana sabe cuándo le están arrastrando ficheros por encima** (para enseñar dónde
